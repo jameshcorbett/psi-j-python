@@ -4,9 +4,10 @@ import os
 import subprocess
 import threading
 import time
+from pathlib import Path
 from abc import ABC, abstractmethod
 from distutils.version import StrictVersion
-from typing import Optional, Dict, List, Type, Tuple
+from typing import Optional, Dict, List, Type, Tuple, IO, Any, Union
 
 import psutil
 
@@ -50,6 +51,15 @@ class _ChildProcessEntry(_ProcessEntry):
     def __init__(self, job: Job, executor: 'LocalJobExecutor',
                  launcher: Optional[Launcher]) -> None:
         super().__init__(job, executor, launcher)
+        self.streams = []  # type: List[IO[Any]]
+
+    def stream(self, spec_path: Optional[Path], write: bool) -> Union[int, IO[Any]]:
+        if not spec_path:
+            return subprocess.DEVNULL
+        else:
+            f = spec_path.open('w' if write else 'r')
+            self.streams.append(f)
+            return f
 
     def kill(self) -> None:
         assert self.process is not None
@@ -104,7 +114,7 @@ def _get_env(spec: JobSpec) -> Optional[Dict[str, str]]:
 
 
 class _ProcessReaper(threading.Thread):
-    _instance = None  # type: _ProcessReaper
+    _instance = None  # type: Optional[_ProcessReaper]
     _lock = threading.RLock()
 
     @classmethod
