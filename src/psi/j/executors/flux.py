@@ -28,6 +28,7 @@ class FluxJobExecutor(JobExecutor):
 
     import radical.utils as _ru
     import flux as _flux
+    import flux.job as _flux_job
 
     _NAME_ = 'flux'
     _VERSION_ = StrictVersion('0.0.1')
@@ -67,17 +68,17 @@ class FluxJobExecutor(JobExecutor):
         self._idmap = dict()  # {flux_id, job.uid}
         self._lock = threading.RLock()  # lock state updates
 
-        self._fh = self._ru.FluxHelper()
-        self._finfo = self._fh.start_service()
+        self._helper = self._ru.FluxHelper()
+        self._finfo = self._helper.start_service()
         self._fuid = self._finfo['uid']
-        self._fex = self._fh.get_executor(self._fuid)
-        self._fh = self._fh.get_handle(self._fuid)
+        self._fex = self._helper.get_executor(self._fuid)
+        self._fh = self._helper.get_handle(self._fuid)
 
     # # TODO: how to free resources?
     # def close(self) -> None:
     #     try:
-    #         if self._fh and self._fuid:
-    #             self._fh.close_service(self._fuid)
+    #         if self._helper and self._fuid:
+    #             self._helper.close_service(self._fuid)
     #     except Exception:
     #         pass
 
@@ -217,7 +218,7 @@ class FluxJobExecutor(JobExecutor):
 
         _, flux_fut = self._jobs[job.id]
         flux_id = flux_fut.jobid()
-        self._flux.job.cancel_async(self._fh, flux_id)
+        self._flux_job.cancel_async(self._fh, flux_id)
 
         job_status = JobStatus(JobState.CANCELED, time=time.time())
         self._update_job_status(job, job_status)
@@ -231,7 +232,7 @@ class FluxJobExecutor(JobExecutor):
         """
 
         with self._lock:
-            ret = self._flux.job.job_list(self._fh)
+            ret = self._flux_job.job_list(self._fh)
             return [x['id'] for x in ret]
 
     def attach(self, job: Job, native_id: str) -> None:
@@ -248,7 +249,7 @@ class FluxJobExecutor(JobExecutor):
         if job.status.state != JobState.NEW:
             raise InvalidJobException('Job must be in the NEW state')
 
-        task = self._tmgr.get_tasks(uids=native_id)
+        task = self._fex.get_tasks(uids=native_id)
         self._jobs[job.id] = [job, task]
 
         state = self._state_map[task.state]
@@ -262,4 +263,3 @@ class FluxJobExecutor(JobExecutor):
 
 
 __PSI_J_EXECUTORS__ = [FluxJobExecutor]
-
