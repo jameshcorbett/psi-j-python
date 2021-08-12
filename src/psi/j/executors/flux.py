@@ -248,6 +248,9 @@ class FluxJobExecutor(JobExecutor):
         :param native_id: The native ID of the process to attached to, as
         obtained through :func:`~psi.j.executors.RPJobExecutor.list` method.
         """
+
+        raise NotImplementedError()
+
         if job.status.state != JobState.NEW:
             raise InvalidJobException('Job must be in the NEW state')
 
