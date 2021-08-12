@@ -217,10 +217,10 @@ class FluxJobExecutor(JobExecutor):
     def cancel(self, job: Job) -> None:
 
         flux_fut = self._jobs[job.id][1]
-        flux_fut.cancel()
+        if flux_fut:
+            flux_fut.cancel()
 
-        _, flux_fut = self._jobs[job.id]
-        flux_id = flux_fut.jobid()
+        flux_id = job.native_id
         self._flux.job.cancel_async(self._fh, flux_id)
 
         job_status = JobStatus(JobState.CANCELED, time=time.time())
@@ -251,12 +251,31 @@ class FluxJobExecutor(JobExecutor):
         if job.status.state != JobState.NEW:
             raise InvalidJobException('Job must be in the NEW state')
 
-        task = self._tmgr.get_tasks(uids=native_id)
-        self._jobs[job.id] = [job, task]
+        flux_fut = None
+        jpsi_state = job.status.state
 
-        state = self._state_map[task.state]
-        assert state is not None
-        self._update_job_status(job, JobStatus(state, time=time.time()))
+        # check if the job is known to this executor
+        for jpsi_id in self._jobs:
+            _jpsi_job, _flux_fut = self._jobs[jpsi_id]
+            if _jpsi_job._native_id == native_id:
+                # we found the job and can attach to the flux job instance
+                flux_fut = _flux_fut
+                jpsi_state = _jpsi_job.state
+                break
+
+        if not flux_fut:
+            # did not find the flux job in the currently know jobs - check if
+            # flux knows about it
+            if (native_id) not in self.list():
+                raise ValueError('native id is not known')
+
+            # FIXME: we know the ID is valid, but we don't have the flux future
+            #        around.  How do we get it?  If we don't, how can we
+            #        subscribe event callbacks?  How do we get current state?
+            assert(False)
+
+        self._jobs[job.id] = [job, flux_fut]
+        self._update_job_status(job, JobStatus(jpsi_state, time=time.time()))
 
     def _update_job_status(self, job: Job, job_status: JobStatus) -> None:
 
