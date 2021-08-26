@@ -28,7 +28,6 @@ class FluxJobExecutor(JobExecutor):
 
     import radical.utils as _ru
     import flux as _flux
-    import flux.job as _flux_job
 
     _NAME_ = 'flux'
     _VERSION_ = StrictVersion('0.0.1')
