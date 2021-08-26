@@ -28,6 +28,7 @@ class FluxJobExecutor(JobExecutor):
 
     import radical.utils as _ru
     import flux as _flux
+    import flux.job as _flux_job
 
     _NAME_ = 'flux'
     _VERSION_ = StrictVersion('0.0.1')
@@ -248,7 +249,15 @@ class FluxJobExecutor(JobExecutor):
         :param native_id: The native ID of the process to attached to, as
         obtained through :func:`~psij.executors.RPJobExecutor.list` method.
         """
-        raise NotImplementedError()
+
+        if job.status.state != JobState.NEW:
+            raise InvalidJobException('Job must be in the NEW state')
+
+        task = self._fex.get_tasks(uids=native_id)
+        self._jobs[job.id] = [job, task]
+
+        state = self._state_map[task.state]
+        self._update_job_status(job, JobStatus(state, time=time.time()))
 
     def _update_job_status(self, job: Job, job_status: JobStatus) -> None:
 
