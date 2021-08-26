@@ -19,8 +19,8 @@ if __name__ == '__main__':
 
     jobs = list()
     job = Job(JobSpec(executable='/bin/date'))
-    exec = JobExecutor.get_instance(name=name, url=url)
-    exec.submit(job)
+    jex = JobExecutor.get_instance(name=name, url=url)
+    jex.submit(job)
     jobs.append(job)
     print('Job submitted')
     status = job.wait()

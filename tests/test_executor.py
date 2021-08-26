@@ -8,7 +8,8 @@ from psij import SubmitException, Job, JobExecutor, JobSpec, JobState
 
 tests = [['local', None],
          ['saga', 'fork://localhost/'],
-         ['saga', 'ssh://localhost/']]
+         ['saga', 'ssh://localhost/'],
+         ['flux', None]]
 
 
 @pytest.mark.parametrize('name,url', tests)
