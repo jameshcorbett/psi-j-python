@@ -94,7 +94,10 @@ class FluxJobExecutor(JobExecutor):
         #       radical changes to the underlying Flux functions.
         logger.debug('register flux jobid for %s: %s', jpsi_id, flux_id)
 
-        self._idmap[flux_id] = [jpsi_id]
+        with self._lock:
+            if flux_id not in self._idmap:
+                self._idmap[flux_id] = list()
+            self._idmap[flux_id].append(jpsi_id)
 
         jpsi_job._native_id = flux_id
         job_status = JobStatus(JobState.QUEUED, time=time.time())
@@ -256,7 +259,11 @@ class FluxJobExecutor(JobExecutor):
 
         task = self._fex.get_tasks(uids=native_id)
         self._jobs[job.id] = [job, task]
-        self._idmap[task.id].append(job.id)
+
+        with self._lock:
+            if task.id not in self._idmap:
+                self._idmap[task.id] = list()
+            self._idmap[task.id].append(job.id)
 
         state = self._state_map[task.state]
         self._update_job_status(job, JobStatus(state, time=time.time()))
