@@ -64,7 +64,7 @@ class FluxJobExecutor(JobExecutor):
         super().__init__(url=url, config=config)
 
         self._jobs: Dict[str, List[Any]] = dict()  # {job.uid: [job, fut, flux_id]}
-        self._idmap: Dict[int, str] = dict()  # {flux_id, job.uid}
+        self._idmap: Dict[int, List[str]] = dict()  # {flux_id, [job.uid]}
         self._lock = threading.RLock()  # lock state updates
 
         self._fh = self._ru.FluxHelper()
@@ -94,7 +94,7 @@ class FluxJobExecutor(JobExecutor):
         #       radical changes to the underlying Flux functions.
         logger.debug('register flux jobid for %s: %s', jpsi_id, flux_id)
 
-        self._idmap[flux_id] = jpsi_id
+        self._idmap[flux_id] = [jpsi_id]
 
         jpsi_job._native_id = flux_id
         job_status = JobStatus(JobState.QUEUED, time=time.time())
@@ -103,35 +103,37 @@ class FluxJobExecutor(JobExecutor):
     def _event_cb(self, fut: Any, evt: Any) -> None:
 
         flux_id = fut.jobid()
-        jpsi_id = self._idmap.get(flux_id)
+        jpsi_ids = self._idmap.get(flux_id)
         jpsi_state = self._event_map[evt.name]
 
-        if not jpsi_id:
-            raise RuntimeError('event cb before jobid cb: %s', jpsi_id)
+        if not jpsi_ids:
+            raise RuntimeError('event cb before jobid cb: %s', jpsi_ids)
 
-        if jpsi_id not in self._jobs:
-            logger.error('event for unknown job: %s: %s - %s',
-                         jpsi_id, jpsi_state, evt.context)
-            return
+        for jpsi_id in jpsi_ids:
 
-        jpsi_job, flux_fut = self._jobs[jpsi_id]
+            if jpsi_id not in self._jobs:
+                logger.error('event for unknown job: %s: %s - %s',
+                             jpsi_id, jpsi_state, evt.context)
+                continue
 
-        # on final state, attempt to obtain exit code
-        metadata = copy.deepcopy(evt.context)
-        exit_code = None
-        if jpsi_state.final:
-            exit_code = evt.context.get('status')
+            jpsi_job, flux_fut = self._jobs[jpsi_id]
+
+            # on final state, attempt to obtain exit code
+            metadata = copy.deepcopy(evt.context)
+            exit_code = None
+            if jpsi_state.final:
+                exit_code = evt.context.get('status')
+                if exit_code:
+                    exit_code = int(exit_code)
+
             if exit_code:
-                exit_code = int(exit_code)
+                jpsi_state = JobState.FAILED
 
-        if exit_code:
-            jpsi_state = JobState.FAILED
-
-        # `exception` events may have error messages (`note`) attached
-        metadata['exit_code'] = exit_code
-        metadata['message'] = metadata.get('note')
-        job_status = JobStatus(jpsi_state, time=time.time(), metadata=metadata)
-        self._update_job_status(jpsi_job, job_status)
+            # `exception` events may have error messages (`note`) attached
+            metadata['exit_code'] = exit_code
+            metadata['message'] = metadata.get('note')
+            job_status = JobStatus(jpsi_state, time=time.time(), metadata=metadata)
+            self._update_job_status(jpsi_job, job_status)
 
     def submit(self, job: Job) -> None:
 
@@ -254,6 +256,7 @@ class FluxJobExecutor(JobExecutor):
 
         task = self._fex.get_tasks(uids=native_id)
         self._jobs[job.id] = [job, task]
+        self._idmap[task.id].append(job.id)
 
         state = self._state_map[task.state]
         self._update_job_status(job, JobStatus(state, time=time.time()))
